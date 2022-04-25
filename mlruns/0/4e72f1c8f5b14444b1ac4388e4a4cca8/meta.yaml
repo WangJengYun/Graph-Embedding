@@ -1,0 +1,15 @@
+artifact_uri: file://cloudsys/user_space/Cloud/Side_Project/Graph_embedding/mlruns/0/4e72f1c8f5b14444b1ac4388e4a4cca8/artifacts
+end_time: null
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+name: ''
+run_id: 4e72f1c8f5b14444b1ac4388e4a4cca8
+run_uuid: 4e72f1c8f5b14444b1ac4388e4a4cca8
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1649558182535
+status: 1
+tags: []
+user_id: cloudy822

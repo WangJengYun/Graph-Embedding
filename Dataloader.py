@@ -1,28 +1,54 @@
-from sampling import BernouliNegativeSampler, UniforNegativeSampler
+# from sampling import BernouliNegativeSampler, UniforNegativeSampler
 # from torchkge.sampling import BernoulliNegativeSampler, UniformNegativeSampler
+from negative_sampling import BernouliNegativeSampler
 
-class NegativeSampling:
-    def __init__(self, dataloader):
-        self.h = dataloader.h
-        self.t = dataloader.t
-        self.r = dataloader.r
+class DataLoader:
+    def __init__(self, kgdataset, batch_size, device, neg_sampling = None):
+        self.batch_size = batch_size
+        self.device = device
 
-        self.nh, self.nt = dataloader.sampler.corrupt_kg(dataloader.batch_size,
-                                                         dataloader.tmp_cuda)
-
-        self.use_cuda = dataloader.use_cuda
-        self.batch_size = dataloader.batch_size
+        self.n_sample = kgdataset.n_facts
+        self.n_ent = kgdataset.n_ent
+        self.n_rel = kgdataset.n_rel
+        self.n_batch = self.get_n_batch(self.n_sample, self.batch_size)
         
-        n_sample = len(self.h)
-        self.n_batch = n_sample//self.batch_size
+        self.heads = kgdataset.head_idx
+        self.tails = kgdataset.tail_idx
+        self.relations = kgdataset.relations
+        self.positive_sample = (self.heads, self.relations, self.tails)
 
-        if n_sample % self.n_batch > 0:
-            self.n_batch += 1
-        
-        if self.use_cuda:
-            self.nh = self.nh.cuda()
-            self.nt = self.nt.cuda()
+        self.sampler = None 
+        if neg_sampling == 'BernouliNegativeSampler':
+            rel_weight = BernouliNegativeSampler.get_rel_weight(self.heads, self.relations, self.tails)
+            #self.sampler = BernouliNegativeSampler(kgdataset,self.n_ent, self.n_rel, self.rel_weight, n_neg = 1)
+            self.sampler = BernouliNegativeSampler(rel_weight, self.n_ent, self.n_rel, self.batch_size, self.n_batch, n_neg = 1)        
+
+    @staticmethod 
+    def get_n_batch(n_sample, batch_size):
+        n_batch = n_sample//batch_size
+        if n_sample % n_batch > 0:
+            n_batch += 1
+        return n_batch
+
+    def __len__(self):        
+        return self.n_batch
+
+    def __iter__(self):
+        return collate_fn(self.positive_sample, self.sampler, self.n_batch, self.batch_size, self.device)
+
+
+class collate_fn:
+    def __init__(self, positive_sample, sampler, n_batch, batch_size, device):
         self.current_batch = 0 
+        
+        self.device = device
+        self.n_batch = n_batch
+        self.batch_size = batch_size
+
+        self.heads, self.relations, self.tails = positive_sample 
+        self.sampler = sampler
+        if self.sampler:
+            self.neg_heads, self.neg_tails = sampler.corrupt_kg(positive_sample)
 
     def __next__(self):
         if self.current_batch == self.n_batch:
@@ -32,55 +58,39 @@ class NegativeSampling:
             self.current_batch += 1 
 
             batch = dict()
-            batch['h'] = self.h[(i*self.batch_size):((i+1)*self.batch_size)]
-            batch['t'] = self.t[(i*self.batch_size):((i+1)*self.batch_size)]
-            batch['r'] = self.r[(i*self.batch_size):((i+1)*self.batch_size)]
-            batch['nh'] = self.nh[(i*self.batch_size):((i+1)*self.batch_size)]
-            batch['nt'] = self.nt[(i*self.batch_size):((i+1)*self.batch_size)]
+            batch['h'] = self.heads[(i*self.batch_size):((i+1)*self.batch_size)]
+            batch['t'] = self.tails[(i*self.batch_size):((i+1)*self.batch_size)]
+            batch['r'] = self.relations[(i*self.batch_size):((i+1)*self.batch_size)]
+            if self.sampler:
+                batch['nh'] = self.neg_heads[(i*self.batch_size):((i+1)*self.batch_size)]
+                batch['nt'] =  self.neg_tails[(i*self.batch_size):((i+1)*self.batch_size)]
 
-            if self.use_cuda == 'batch':
+            if self.device == 'cuda':
                 batch['h'] = batch['h'].cuda()
                 batch['t'] = batch['t'].cuda()
                 batch['r'] = batch['r'].cuda()
-
-                batch['nh'] = batch['nh'].cuda()
-                batch['nt'] = batch['nt'].cuda()
+                if self.sampler:
+                    batch['nh'] = batch['nh'].cuda()
+                    batch['nt'] = batch['nt'].cuda()
 
             return batch 
     
-    def __iter(self):
+    def __iter__(self):
         return self 
 
-class TrainDataLoader:
-    def __init__(self, kg, batch_size, sampling_type, use_cuda = None):
+if __name__ == "__main__":
+    import pandas as pd
+    from data_format import KG_Dataset
+    df = pd.read_csv('./dataset/FB15k/fb15k_dataset.csv')
+    KG_data = KG_Dataset(input_data = df)
+    kg_train, KG_val, KG_test = KG_data.split_KG(sizes = (483142, 50000, 59071),validation = True)
 
-        self.h = kg.head_idx
-        self.t = kg.tail_idx
-        self.r = kg.relations
+    traindataloader = DataLoader(kg_train,
+                                 neg_sampling = 'BernouliNegativeSampler',
+                                 batch_size = 32768, 
+                                 device = 'cuda')
 
-        self.use_cuda = use_cuda
-        self.batch_size = batch_size
+    len(traindataloader)
 
-        if sampling_type == 'unif':
-            self.sampler = UniforNegativeSampler(kg)
-        elif sampling_type == 'bern':
-            self.sampler = BernouliNegativeSampler(kg)
-
-        self.tmp_cuda  = use_cuda in ['batch','all']
-
-        if use_cuda is not None and use_cuda == 'all':
-            self.h = self.h.cuda()
-            self.t = self.t.cuda()
-            self.r = self.r.cuda()
-
-    def __len__(self):
-        n_sample = len(self.h)
-        n_batch = n_sample//self.batch_size
-
-        if n_sample % n_batch > 0:
-            n_batch += 1
-        
-        return n_batch
-
-    def __iter__(self):
-        return NegativeSampling(self)
+    for i, batch  in enumerate(traindataloader):
+        pass

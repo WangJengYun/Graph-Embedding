@@ -1,0 +1,10 @@
+{
+    "model_name": "RotateE",
+    "distance_name":"L2",
+    "loss_name":"LogisticLoss",
+    "adv_temperature":2,
+    "margin":6,
+    "epsilon":2,
+    "cal_mode":"tail_batch",
+    "emb_dim": 128
+}

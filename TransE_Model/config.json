@@ -1,5 +1,0 @@
-{
-    "model_name": "TransE",
-    "distance_type":"L2",
-    "emb_dim": 150
-}

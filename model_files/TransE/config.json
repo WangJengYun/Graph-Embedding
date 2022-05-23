@@ -1,0 +1,7 @@
+{
+    "model_name": "TransE",
+    "distance_name":"L2",
+    "loss_name":"MarginLoss",
+    "margin" : 0.5,
+    "emb_dim": 128
+}

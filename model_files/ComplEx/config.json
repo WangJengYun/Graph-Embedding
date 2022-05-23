@@ -1,0 +1,8 @@
+{
+    "model_name": "ComplEx",
+    "distance_name":"L2",
+    "loss_name":"LogisticLoss",
+    "adv_temperature":1,
+    "cal_mode":"tail_batch",
+    "emb_dim": 256
+}
